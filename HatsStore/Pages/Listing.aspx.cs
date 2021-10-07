@@ -1,0 +1,84 @@
+﻿using HatsStore.Models;
+using HatsStore.Models.Repository;
+using HatsStore.Pages.Helpers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web.Routing;
+
+namespace HatsStore.Pages
+{
+    public partial class Listing : System.Web.UI.Page
+    {
+        private Repository repository = new Repository();
+        private int pageSize = 4;
+
+        protected int CurrentPage
+        {
+            get
+            {
+                int page;
+                page = GetPageFromRequest();
+                return page > MaxPage ? MaxPage : page;
+            }
+        }
+
+        // Новое свойство, возвращающее наибольший номер допустимой страницы
+        protected int MaxPage
+        {
+            get
+            {
+                int prodCount = FilterHats().Count();
+                return (int)Math.Ceiling((decimal)prodCount / pageSize);
+            }
+        }
+
+        private int GetPageFromRequest()
+        {
+            int page;
+            string reqValue = (string)RouteData.Values["page"] ??
+                Request.QueryString["page"];
+            return reqValue != null && int.TryParse(reqValue, out page) ? page : 1;
+        }
+
+        public IEnumerable<Hat> GetHats() 
+        {
+            return FilterHats()
+                .OrderBy(h => h.HatId)
+                .Skip((CurrentPage - 1) * pageSize)
+                .Take(pageSize);
+        }
+
+        // Новый вспомогательный метод для фильтрации головных уборов по категориям
+        private IEnumerable<Hat> FilterHats()
+        {
+            IEnumerable<Hat> hats = repository.Hats;
+            string currentCategory = (string)RouteData.Values["category"] ??
+                Request.QueryString["category"];
+            return currentCategory == null ? hats :
+                hats.Where(p => p.Category == currentCategory);
+        }
+
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (IsPostBack)
+            {
+                if (int.TryParse(Request.Form["add"], out int selectedHatId))
+                {
+                    Hat selectedHat = repository.Hats
+                        .Where(h => h.HatId == selectedHatId).FirstOrDefault();
+
+                    if (selectedHat != null)
+                    {
+                        SessionHelper.GetCart(Session).AddItem(selectedHat, 1);
+                        SessionHelper.Set(Session, SessionKey.RETURN_URL,
+                            Request.RawUrl);
+
+                        Response.Redirect(RouteTable.Routes
+                            .GetVirtualPath(null, "cart", null).VirtualPath);
+                    }
+                }
+            }
+        }
+    }
+}
